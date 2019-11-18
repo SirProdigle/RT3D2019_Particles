@@ -105,6 +105,7 @@ struct Particle
 	float2 SizeW       : SIZE;
 	float Age          : AGE;
 	uint Type          : TYPE;
+	float Speed		   : SPEED;
 };
   
 Particle StreamOutVS(Particle vin)
@@ -139,6 +140,7 @@ void StreamOutGS(point Particle gin[1],
 			p.SizeW       = float2(3.0f, 3.0f);
 			p.Age         = 0.0f;
 			p.Type        = PT_FLARE;
+			p.Speed		  = RandUnitVec3(gin[0].InitialPosW.x);
 
 			ptStream.Append(p);
 			
@@ -159,7 +161,7 @@ void StreamOutGS(point Particle gin[1],
 
 GeometryShader gsStreamOut = ConstructGSWithSO( 
 	CompileShader( gs_5_0, StreamOutGS() ), 
-	"POSITION.xyz; VELOCITY.xyz; SIZE.xy; AGE.x; TYPE.x" );
+	"POSITION.xyz; VELOCITY.xyz; SIZE.xy; AGE.x; TYPE.x; SPEED.x" );
 	
 technique11 StreamOutTech
 {
@@ -186,13 +188,14 @@ struct VertexOut
 	float2 SizeW : SIZE;
 	float4 Color : COLOR;
 	uint   Type  : TYPE;
+	float Speed  : SPEED;
 };
 
 VertexOut DrawVS(Particle vin)
 {
 	VertexOut vout;
 	
-	float t = vin.Age;
+	float t = vin.Age ;
 	
 	// constant acceleration equation
 	vout.PosW = 0.5f*t*t*gAccelW + t*vin.InitialVelW + vin.InitialPosW;
@@ -203,6 +206,7 @@ VertexOut DrawVS(Particle vin)
 	
 	vout.SizeW = vin.SizeW;
 	vout.Type  = vin.Type;
+	vout.Speed = vin.Speed * t;
 	
 	return vout;
 }
@@ -235,12 +239,15 @@ void DrawGS(point VertexOut gin[1],
 		//
 		float halfWidth  = 0.5f*gin[0].SizeW.x;
 		float halfHeight = 0.5f*gin[0].SizeW.y;
+
+		float SpeedTime = gin[0].Speed * 1;
+		int flip = floor(gin[0].PosW.x) % 2 == 0 ? 1 : -1;
 	
 		float4 v[4];
-		v[0] = float4(gin[0].PosW + halfWidth*right - halfHeight*up, 1.0f);
-		v[1] = float4(gin[0].PosW + halfWidth*right + halfHeight*up, 1.0f);
-		v[2] = float4(gin[0].PosW - halfWidth*right - halfHeight*up, 1.0f);
-		v[3] = float4(gin[0].PosW - halfWidth*right + halfHeight*up, 1.0f);
+		v[0] = float4(gin[0].PosW + (sin(SpeedTime + 135)* flip) * halfWidth*right + cos(SpeedTime + 135) * halfWidth*up, 1.0f);
+		v[1] = float4(gin[0].PosW + (sin(SpeedTime + 45)* flip) * halfWidth*right + cos(SpeedTime + 45) * halfWidth*up, 1.0f);
+		v[2] = float4(gin[0].PosW + (sin(SpeedTime + 225)* flip) * halfWidth*right + cos(SpeedTime + 225) * halfWidth*up, 1.0f);
+		v[3] = float4(gin[0].PosW + (sin(SpeedTime + 315)* flip) * halfWidth*right + cos(SpeedTime + 315) * halfWidth*up, 1.0f);
 		
 		//
 		// Transform quad vertices to world space and output 
