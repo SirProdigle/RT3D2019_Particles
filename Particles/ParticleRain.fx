@@ -107,7 +107,7 @@ Particle StreamOutVS(Particle vin)
 // to particle system, as the destroy/spawn rules will be 
 // different.
 [maxvertexcount(6)]
-void StreamOutGS(point Particle gin[1], 
+void StreamOutGS(point Particle gin[1],
                  inout PointStream<Particle> ptStream)
 {	
 	gin[0].Age += gTimeStep;

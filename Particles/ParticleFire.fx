@@ -97,6 +97,7 @@ float3 RandUnitVec3(float offset)
 
 #define PT_EMITTER 0
 #define PT_FLARE 1
+#define PT_SMOKE 2
  
 struct Particle
 {
@@ -118,8 +119,8 @@ Particle StreamOutVS(Particle vin)
 // programed here will generally vary from particle system
 // to particle system, as the destroy/spawn rules will be 
 // different.
-[maxvertexcount(2)]
-void StreamOutGS(point Particle gin[1], 
+[maxvertexcount(3)]
+void StreamOutGS(point Particle gin[1], uint pixelSeed:SV_PrimitiveID,
                  inout PointStream<Particle> ptStream)
 {	
 	gin[0].Age += gTimeStep;
@@ -127,26 +128,45 @@ void StreamOutGS(point Particle gin[1],
 	if( gin[0].Type == PT_EMITTER )
 	{	
 		// time to emit a new particle?
-		if( gin[0].Age > 0.005f )
+		if (gin[0].Age > 0.009f)
 		{
-			float3 vRandom = RandUnitVec3(0.0f);
-			float3 vRandom2 = RandUnitVec3(0.01f);
+			float3 vRandom = RandUnitVec3(pixelSeed);
+			float3 vRandom2 = RandUnitVec3(pixelSeed);
 			vRandom.x *= 0.5f;
 			vRandom.z *= 0.5f;
-			
+
 			Particle p;
 			p.InitialPosW = gEmitPosW.xyz;
 			p.InitialVelW = vRandom2;
-			p.SizeW       = float2(3.0f, 3.0f);
-			p.Age         = 0.0f;
-			p.Type        = PT_FLARE;
-			p.Speed		  = RandUnitVec3(gin[0].InitialPosW.x);
+			p.SizeW = float2(5.0f, 5.0f);
+			p.Age = 0.0f;
+			p.Type = PT_FLARE;
+			p.Speed = RandUnitVec3(gin[0].InitialPosW.x);
 
 			ptStream.Append(p);
-			
+
 			// reset the time to emit
 			gin[0].Age = 0.0f;
+		
+			
+			//LIAM emit smoke too
+			 vRandom = RandUnitVec3(0.0f);
+			 vRandom2 = RandUnitVec3(0.01f);
+			vRandom.x *= 0.5f;
+			vRandom.z *= 0.5f;
+
+			Particle s;
+			s.InitialPosW = gEmitPosW.xyz + float3(0,0,0);
+			s.InitialVelW = RandUnitVec3(0.01f);
+			s.SizeW = float2(2.0f, 2.0f);
+			s.Age = 0.0f;
+			s.Type = PT_SMOKE;
+			s.Speed = RandUnitVec3(gin[0].InitialPosW.x) * 5;
+
+			ptStream.Append(s);
+
 		}
+		
 		
 		// always keep emitters
 		ptStream.Append(gin[0]);
@@ -154,7 +174,9 @@ void StreamOutGS(point Particle gin[1],
 	else
 	{
 		// Specify conditions to keep particle; this may vary from system to system.
-		if( gin[0].Age <= 1.0f )
+		if( gin[0].Age <= 2.0f && gin[0].Type == PT_FLARE )
+			ptStream.Append(gin[0]);
+		else if (gin[0].Age <= 4.0f && gin[0].Type == PT_SMOKE)
 			ptStream.Append(gin[0]);
 	}		
 }
@@ -201,12 +223,21 @@ VertexOut DrawVS(Particle vin)
 	vout.PosW = 0.5f*t*t*gAccelW + t*vin.InitialVelW + vin.InitialPosW;
 	
 	// fade color with time
-	float opacity = 1.0f - smoothstep(0.0f, 1.0f, t/1.0f);
-	vout.Color = float4(1.0f, 1.0f, 1.0f, opacity);
-	
-	vout.SizeW = vin.SizeW;
-	vout.Type  = vin.Type;
-	vout.Speed = vin.Speed * t;
+	if (vin.Type == PT_FLARE) {
+		float opacity = 1.0f - smoothstep(0.0f, 1.0f, t / 4);
+		vout.Color = float4(1.0f, 1.0f, 1.0f, opacity);
+
+		vout.SizeW = vin.SizeW;
+		vout.Type = vin.Type;
+		vout.Speed = vin.Speed * t;
+	}
+	else {
+		float opacity = 0.45f - smoothstep(0, 0.5f, t / 10.0f);
+		vout.Color = float4(1.0f, 1.0f, 1.0f, opacity);
+		vout.SizeW = vin.SizeW;
+		vout.Type = vin.Type;
+		vout.Speed = vin.Speed * t * 0.2;
+	}
 	
 	return vout;
 }
@@ -217,58 +248,64 @@ struct GeoOut
 	float4 PosH  : SV_Position;
 	float4 Color : COLOR;
 	float2 Tex   : TEXCOORD;
+	unsigned int Type : TEXNUM;
 };
 
 // The draw GS just expands points into camera facing quads.
 [maxvertexcount(4)]
-void DrawGS(point VertexOut gin[1], 
-            inout TriangleStream<GeoOut> triStream)
-{	
+void DrawGS(point VertexOut gin[1],
+	inout TriangleStream<GeoOut> triStream)
+{
 	// do not draw emitter particles.
-	if( gin[0].Type != PT_EMITTER )
+	if (gin[0].Type != PT_EMITTER)
 	{
 		//
 		// Compute world matrix so that billboard faces the camera.
 		//
-		float3 look  = normalize(gEyePosW.xyz - gin[0].PosW);
-		float3 right = normalize(cross(float3(0,1,0), look));
-		float3 up    = cross(look, right);
-		
+		float3 look = normalize(gEyePosW.xyz - gin[0].PosW);
+		float3 right = normalize(cross(float3(0, 1, 0), look));
+		float3 up = cross(look, right);
+
 		//
 		// Compute triangle strip vertices (quad) in world space.
 		//
-		float halfWidth  = 0.5f*gin[0].SizeW.x;
+		float halfWidth = 0.5f*gin[0].SizeW.x;
 		float halfHeight = 0.5f*gin[0].SizeW.y;
 
 		float SpeedTime = gin[0].Speed * 1;
 		int flip = floor(gin[0].PosW.x) % 2 == 0 ? 1 : -1;
-	
+
 		float4 v[4];
-		v[0] = float4(gin[0].PosW + (sin(SpeedTime + 135)* flip) * halfWidth*right + cos(SpeedTime + 135) * halfWidth*up, 1.0f);
-		v[1] = float4(gin[0].PosW + (sin(SpeedTime + 45)* flip) * halfWidth*right + cos(SpeedTime + 45) * halfWidth*up, 1.0f);
-		v[2] = float4(gin[0].PosW + (sin(SpeedTime + 225)* flip) * halfWidth*right + cos(SpeedTime + 225) * halfWidth*up, 1.0f);
-		v[3] = float4(gin[0].PosW + (sin(SpeedTime + 315)* flip) * halfWidth*right + cos(SpeedTime + 315) * halfWidth*up, 1.0f);
-		
+		v[0] = float4(gin[0].PosW + (sin(SpeedTime + radians(135))* flip) * halfWidth*right + cos(SpeedTime + radians(135)) * halfWidth*up, 1.0f);
+		v[1] = float4(gin[0].PosW + (sin(SpeedTime + radians(45))* flip) * halfWidth*right + cos(SpeedTime + radians(45) )* halfWidth*up, 1.0f);
+		v[2] = float4(gin[0].PosW + (sin(SpeedTime + radians(225))* flip) * halfWidth*right + cos(SpeedTime + radians(225)) * halfWidth*up, 1.0f);
+		v[3] = float4(gin[0].PosW + (sin(SpeedTime + radians(315))* flip) * halfWidth*right + cos(SpeedTime + radians(315)) * halfWidth*up, 1.0f);
+
 		//
 		// Transform quad vertices to world space and output 
 		// them as a triangle strip.
 		//
 		GeoOut gout;
 		[unroll]
-		for(int i = 0; i < 4; ++i)
+		for (int i = 0; i < 4; ++i)
 		{
-			gout.PosH  = mul(v[i], gViewProj);
-			gout.Tex   = gQuadTexC[i];
+			gout.PosH = mul(v[i], gViewProj);
+			gout.Tex = gQuadTexC[i];
 			gout.Color = gin[0].Color;
+			gout.Type = gin[0].Type;
 			triStream.Append(gout);
-			
-		}	
+		}
 	}
 }
 
 float4 DrawPS(GeoOut pin) : SV_TARGET
 {
-	return gTexArray.Sample(samLinear, float3(pin.Tex, 0) )*pin.Color;
+	if (pin.Type == PT_FLARE) {
+		return gTexArray.Sample(samLinear, float3(pin.Tex, 0))*pin.Color;
+		}
+	else {
+		return gTexArray.Sample(samLinear, float3(pin.Tex, 1))*pin.Color;
+	}
 }
 
 technique11 DrawTech
