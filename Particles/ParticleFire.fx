@@ -131,7 +131,7 @@ void StreamOutGS(point Particle gin[1], uint pixelSeed:SV_PrimitiveID,
 		if (gin[0].Age > 0.009f)
 		{
 			float rnd = RandUnitVec3(pixelSeed * gGameTime).x;
-			float rnd2 = RandUnitVec3(pixelSeed * gGameTime/2 + 10);
+			float rnd2 = RandUnitVec3(pixelSeed + gGameTime * 100);
 
 			Particle p;
 			p.InitialPosW = gEmitPosW.xyz;
