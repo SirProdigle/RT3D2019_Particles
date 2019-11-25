@@ -130,38 +130,30 @@ void StreamOutGS(point Particle gin[1], uint pixelSeed:SV_PrimitiveID,
 		// time to emit a new particle?
 		if (gin[0].Age > 0.009f)
 		{
-			float3 vRandom = RandUnitVec3(pixelSeed);
-			float3 vRandom2 = RandUnitVec3(pixelSeed);
-			vRandom.x *= 0.5f;
-			vRandom.z *= 0.5f;
+			float rnd = RandUnitVec3(pixelSeed * gGameTime).x;
+			float rnd2 = RandUnitVec3(pixelSeed * gGameTime/2 + 10);
 
 			Particle p;
 			p.InitialPosW = gEmitPosW.xyz;
-			p.InitialVelW = vRandom2;
+			p.InitialVelW = float3(rnd * 1.2f,rnd,rnd * 1.5f);
 			p.SizeW = float2(5.0f, 5.0f);
 			p.Age = 0.0f;
 			p.Type = PT_FLARE;
-			p.Speed = RandUnitVec3(gin[0].InitialPosW.x);
+			p.Speed = rnd;
 
 			ptStream.Append(p);
 
 			// reset the time to emit
 			gin[0].Age = 0.0f;
 		
-			
-			//LIAM emit smoke too
-			 vRandom = RandUnitVec3(0.0f);
-			 vRandom2 = RandUnitVec3(0.01f);
-			vRandom.x *= 0.5f;
-			vRandom.z *= 0.5f;
 
 			Particle s;
-			s.InitialPosW = gEmitPosW.xyz + float3(0,0,0);
-			s.InitialVelW = RandUnitVec3(0.01f);
+			s.InitialPosW = gEmitPosW.xyz + float3(rnd2,rnd2,rnd2);
+			s.InitialVelW = float3(rnd2.x * 0.7f,rnd2.x ,rnd2.x * 1.4f);
 			s.SizeW = float2(2.0f, 2.0f);
 			s.Age = 0.0f;
 			s.Type = PT_SMOKE;
-			s.Speed = RandUnitVec3(gin[0].InitialPosW.x) * 5;
+			s.Speed = rnd2 * 5;
 
 			ptStream.Append(s);
 
